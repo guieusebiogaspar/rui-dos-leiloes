@@ -1,12 +1,43 @@
 const express = require("express");
-const bodyParser = require("body-parser");
-const { Pool, Client } = require('pg')
+//const bodyParser = require("body-parser");
+const morgan = require("morgan")
+const cors = require("cors");
 
 const leiloesRoutes = require("./api/routes/leiloes");
+const usersRoutes = require("./api/routes/users");
 
 const app = express();
 
+/*
+app.use(cors());
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+
+  if (req.method === "OPTIONS") {
+    res.header("Access-Control-Allow-Methods", "PUT, POST, PATCH, DELETE, GET");
+    return res.status(200).json({});
+  }
+})*/
+
+// para receber no terminal os requests também
+app.use(morgan("dev"));
+
+// tornar o json mais readable e simples
+app.use(express.urlencoded({extended: false}));
+app.use(express.json());
+
+app.use("/users", usersRoutes);
 app.use("/leiloes", leiloesRoutes);
+
+
 
 // ERROS
 //req = o que recebemos, res = resposta que damos
