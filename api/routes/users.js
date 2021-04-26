@@ -7,8 +7,9 @@ const UsersController = require("../controllers/users");
 router.get("/", UsersController.get_users);
 
 // Registar um novo utilizador
-router.post("/", UsersController.registar_user);
+router.post("/signup", UsersController.registar_user);
 
 // login de um novo utilizador
+router.put("/login", UsersController.login_user);
 
 module.exports = router;
