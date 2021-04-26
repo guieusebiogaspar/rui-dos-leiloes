@@ -1,5 +1,6 @@
 const pool = require("../../db")
 const Cursor = require('pg-cursor')
+const bcrypt = require("bcrypt")
 
 const admin_email = "gui@hotmail.com";
 
@@ -21,7 +22,6 @@ exports.get_users = async (req, res) => {
 exports.registar_user = async (req, res) => {
     try {
         const client = await pool.connect()
-
         // le os dados do utilizador
         const username = req.body.username;
         const email = req.body.email;
@@ -29,13 +29,24 @@ exports.registar_user = async (req, res) => {
 
         // query para inserir novo utilizador na db
         const newUser = await client.query("INSERT INTO utilizador (username, email, password) VALUES ($1, $2, $3) RETURNING *", [username, email, password])
-        
         // envia para o postman a resposta caso corra tudo bem
         res.json(newUser.rows)
     } catch (error) {
-        res.status(500).json({ err: "Erro a registar user" });
+        if(!req.body.username || !req.body.email || !req.body.password) {
+            res.status(500).json({ err: "Preencha os campos todos"})
+        } else if (error.detail.includes("Key (username)") && error.detail.includes("already exists.")){
+            res.status(500).json({ err: "Já existe um user com esse username"})
+        }
+        /*else if(typeof username === "undefined" || typeof email === "undefined" || typeof password === "undefined") {
+            res.status(500).json({ err: "Por favor preencha os campos todos"})
+        } else {
+            console.log(error)
+            res.status(500).json({ err: "Erro a registar user" });
+        }*/
     } finally {
-        client.end()
+        if(typeof client !== "undefined") {
+            client.end()
+        }
     }
 }
 
