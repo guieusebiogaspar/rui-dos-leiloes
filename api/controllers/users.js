@@ -34,15 +34,17 @@ exports.registar_user = async (req, res) => {
     } catch (error) {
         if(!req.body.username || !req.body.email || !req.body.password) {
             res.status(500).json({ err: "Preencha os campos todos"})
-        } else if (error.detail.includes("Key (username)") && error.detail.includes("already exists.")){
-            res.status(500).json({ err: "Já existe um user com esse username"})
-        }
-        /*else if(typeof username === "undefined" || typeof email === "undefined" || typeof password === "undefined") {
-            res.status(500).json({ err: "Por favor preencha os campos todos"})
-        } else {
+        } 
+        else if (error.detail.includes("Key (username)") && error.detail.includes("already exists.")){
+            res.status(500).json({ err: "Já existe um user com esse username"})  
+        } 
+        else if (error.detail.includes("Key (email)") && error.detail.includes("already exists.")){
+            res.status(500).json({ err: "Já existe um user com esse email"})  
+        } 
+        else {
             console.log(error)
             res.status(500).json({ err: "Erro a registar user" });
-        }*/
+        }
     } finally {
         if(typeof client !== "undefined") {
             client.end()
