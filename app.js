@@ -10,8 +10,7 @@ const initPassport = require("./passportConfig.js")
 
 const leiloesRoutes = require("./api/routes/leiloes");
 const usersRoutes = require("./api/routes/users");
-require("dotenv").config();
-
+//require("dotenv").config();
 const app = express();
 
 /*
