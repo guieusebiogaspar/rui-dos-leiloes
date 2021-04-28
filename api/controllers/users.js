@@ -2,23 +2,23 @@ const pool = require("../../db")
 const Cursor = require('pg-cursor')
 const bcrypt = require("bcrypt")
 const jwt = require("jsonwebtoken")
+require("dotenv").config();
 
 const admin_email = "gui@hotmail.com";
 
 exports.get_users = async (req, res) => {
 
     try {
-        jwt.verify(req.token, "secret", (err, authData) => {
+        jwt.verify(req.token, process.env.TOKEN_PASSWORD, (err, authData) => {
             if(err) {
-                res.status(403).json({ message: "Não está logado"})
-                return
+                return res.status(403).json({ message: "Não está logado"})
             } 
         })
         let client = await pool.connect()
 
         let results = await client.query("select * from utilizador")
-        res.json(results.rows)
         console.table(results.rows)
+        res.json(results.rows)
     } catch (error) {
         res.status(500).json({ err: "Erro a ler users" });
     } finally {
@@ -41,14 +41,12 @@ exports.registar_user = async (req, res) => {
         
         let verificaUsername = await client.query("SELECT * FROM utilizador WHERE username = $1", [username])
         if(verificaUsername.rows.length > 0) {
-            res.status(500).json({ err: "Já existe um user com esse username"})
-            return 
+            return res.status(500).json({ err: "Já existe um user com esse username"}) 
         }
 
         let verificaEmail = await client.query("SELECT * FROM utilizador WHERE email = $1", [email])
         if(verificaEmail.rows.length > 0) {
-            res.status(500).json({ err: "Já existe um user com esse email"}) 
-            return
+            return res.status(500).json({ err: "Já existe um user com esse email"}) 
         }
 
         // query para inserir novo utilizador na db
@@ -104,7 +102,7 @@ exports.login_user = async (req, res) => {
                           username: user.username,
                           admin: user.admin,
                         },
-                        "secret",
+                        process.env.TOKEN_PASSWORD,
                         function (err, token) {
                             if(err) {
                                 throw err;
@@ -128,8 +126,8 @@ exports.login_user = async (req, res) => {
     } catch (error) {
         res.status(500).json({ err: "Erro a registar user" });
     } finally {
-        // client.close()
+        if(typeof client !== "undefined") {
+            client.end()
+        }
     }
 }
-
-// iniciar conexao e terminar (client)

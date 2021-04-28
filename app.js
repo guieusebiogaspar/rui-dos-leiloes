@@ -10,7 +10,7 @@ const initPassport = require("./passportConfig.js")
 
 const leiloesRoutes = require("./api/routes/leiloes");
 const usersRoutes = require("./api/routes/users");
-//require("dotenv").config();
+require("dotenv").config();
 const app = express();
 
 /*
@@ -42,7 +42,7 @@ app.use(express.json());
 app.use(
   session({
     // Key we want to keep secret which will encrypt all of our information
-    secret: "secret",
+    secret: process.env.TOKEN_PASSWORD,
     // Should we resave our session variables if nothing has changes which we dont
     resave: false,
     // Save empty value if there is no vaue which we do not want to do
