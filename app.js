@@ -2,6 +2,11 @@ const express = require("express");
 //const bodyParser = require("body-parser");
 const morgan = require("morgan")
 const cors = require("cors");
+const session = require("express-session");
+const passport = require("passport")
+const initPassport = require("./passportConfig.js")
+
+//initPassport(passport);
 
 const leiloesRoutes = require("./api/routes/leiloes");
 const usersRoutes = require("./api/routes/users");
@@ -34,6 +39,21 @@ app.use(morgan("dev"));
 app.use(express.urlencoded({extended: false}));
 app.use(express.json());
 
+app.use(
+  session({
+    // Key we want to keep secret which will encrypt all of our information
+    secret: "secret",
+    // Should we resave our session variables if nothing has changes which we dont
+    resave: false,
+    // Save empty value if there is no vaue which we do not want to do
+    saveUninitialized: false
+  })
+);
+
+/*
+app.use(passport.initialize)
+app.use(passport.session)*/
+
 app.use("/users", usersRoutes);
 app.use("/leiloes", leiloesRoutes);
 
@@ -55,37 +75,5 @@ app.use((req, res, next) => {
       message: "Error not found! Status: " + status,
     });
   });
-
-/*
-const pool = new Pool({
-  user: 'dbuser',
-  host: 'database.server.com',
-  database: 'mydb',
-  password: 'secretpassword',
-  port: 3211,
-})
-
-
-pool.query('SELECT NOW()', (err, res) => {
-  console.log(err, res)
-  pool.end()
-})
-
-const client = new Client({
-  user: 'dbuser',
-  host: 'database.server.com',
-  database: 'mydb',
-  password: 'secretpassword',
-  port: 3211,
-})
-
-client.connect()
-
-
-client.query('SELECT NOW()', (err, res) => {
-  console.log(err, res)
-  client.end()
-})
-*/
 
 module.exports = app;
