@@ -7,18 +7,33 @@ require("dotenv").config();
 const admin_email = "gui@hotmail.com";
 
 exports.get_users = async (req, res) => {
-
     try {
-        jwt.verify(req.token, process.env.TOKEN_PASSWORD, (err, authData) => {
-            if(err) {
-                return res.status(403).json({ message: "Não está logado"})
-            } 
-        })
         let client = await pool.connect()
 
         let results = await client.query("select * from utilizador")
+
+        let response;
+        if(results.rows.length === 0) {
+            response = {
+                message: "Não existe nenhum user registado"
+            }
+        } 
+        else{
+             response = {
+                // o que vai ser printado no ecrã
+                count: results.rows.length,
+                list: results.rows.map((user) => {
+                return {
+                    id: user.userid,
+                    username: user.username,
+                    email: user.email
+                };
+                }),
+            };
+        }
+        
         console.table(results.rows)
-        res.json(results.rows)
+        res.status(200).json(response)
     } catch (error) {
         res.status(500).json({ err: "Erro a ler users" });
     } finally {
@@ -52,7 +67,7 @@ exports.registar_user = async (req, res) => {
         // query para inserir novo utilizador na db
         let newUser = await client.query("INSERT INTO utilizador (username, email, password) VALUES ($1, $2, $3) RETURNING *", [username, email, hashedPassword])
         // envia para o postman a resposta caso corra tudo bem
-        res.json(newUser.rows)
+        res.status(200).json(newUser.rows)
     } catch (error) {
         if(!req.body.username || !req.body.email || !req.body.password) {
             res.status(500).json({ err: "Preencha os campos todos"})
@@ -92,20 +107,21 @@ exports.login_user = async (req, res) => {
                 }
 
                 if(isMatched) {
-                    if (user.email === admin_email) {
-                        user.admin = true; //se o login for feito pelo admin (aqui falta atualizar com query)
-                      }
             
-                      jwt.sign(
+                    jwt.sign(
                         {
                           userId: user.userid,
                           username: user.username,
                           admin: user.admin,
                         },
                         process.env.TOKEN_PASSWORD,
-                        function (err, token) {
+                        async function (err, token) {
                             if(err) {
                                 throw err;
+                            }
+                            // SE FOR O USER ADMIN
+                            if (user.email === admin_email) {
+                                await client.query("UPDATE utilizador SET admin = true WHERE email = $1", [user.email])
                             }
                             res.status(200).json({
                                 userData: user.username,
