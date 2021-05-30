@@ -28,7 +28,11 @@ router.put("/leilao/:leilaoid", verifyToken, LeiloesController.put_editar_leilao
 // escrever mensagem no mural de um leilão
 router.post("/leilao/mural/:leilaoid", verifyToken, LeiloesController.post_mural)
 
+// Terminar leiloes
+router.put("/terminar", verifyToken, LeiloesController.terminar_leiloes)
 
 // admin cancela leilão
+router.put("/cancelar/:leilaoid", verifyToken, LeiloesController.cancelar_leilao)
+
 
 module.exports = router;

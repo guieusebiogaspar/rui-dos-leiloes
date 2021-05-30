@@ -13,7 +13,7 @@ router.post("/signup", UsersController.registar_user);
 // login de um novo utilizador
 router.put("/login", UsersController.login_user);
 
-// Tal como nos abrirmos a nossa caixa de mail e nao abrims alguns mails
+// Tal como nos abrirmos a nossa caixa de mail e nao abrimos alguns mails
 // aqui a situação é um bocado semelhante. As mensagesns só passam a lidas
 // caso sejam vistas no endpoint /notificacoes
 
@@ -24,5 +24,6 @@ router.get("/mail", verifyToken, UsersController.get_mensagens);
 router.get("/notificacoes", verifyToken, UsersController.get_notificacoes);
 
 // admin bane user
+router.put("/banir/:userid", verifyToken, UsersController.banir)
 
 module.exports = router;

@@ -27,7 +27,7 @@ exports.get_leiloes = async (req, res) => {
               };
         }
 
-        console.table(results.rows)
+        //console.table(results.rows)
         res.status(200).json(response)
     } catch (error) {
         res.status(500).json({ err: "Erro a ler leilões" });
@@ -101,7 +101,7 @@ exports.get_ean = async (req, res) => {
               };
         }
 
-        console.table(results.rows)
+        //console.table(results.rows)
         res.status(200).json(response)
 
     } catch (error) {
@@ -187,17 +187,7 @@ exports.put_editar_leilao = async (req, res) => {
 
         let titulo = req.body.titulo;
         let descricao = req.body.descricao;
-        let data = new Date();
-
-        let dia = String(data.getDate()).padStart(2, '0');
-        let mes = String(data.getMonth() + 1).padStart(2, '0')
-        let ano = data.getFullYear()
-        let hora = data.getHours()
-        let minutos = data.getMinutes()
-        let segundos = data.getSeconds()
-        
-        //2021-06-22 19:10:25
-        let dataEdicao = ano + "-" + mes + "-" + dia + " " + hora + ":" + minutos + ":" + segundos 
+        let dataEdicao = new Date();
 
         let client = await pool.connect()
 
@@ -249,7 +239,7 @@ exports.put_editar_leilao = async (req, res) => {
                 utilizador_userid: results.rows[0].utilizador_userid
               };
 
-            console.table(results.rows)
+            //console.table(results.rows)
             return res.status(200).json(response)
         }
 
@@ -272,6 +262,7 @@ exports.post_licitacao = async (req, res) => {
         if(!req.body.preco) {
             return res.status(500).json({ err: "Não introduziu um preço para a licitacao"})
         } 
+
         const leilaoid = req.params.leilaoid;
 
         let preco = req.body.preco;
@@ -293,18 +284,14 @@ exports.post_licitacao = async (req, res) => {
 
             return res.status(200).json(response)
         } else {
-            try {
                 
-                let data = new Date();
-                let dia = String(data.getDate()).padStart(2, '0');
-                let mes = String(data.getMonth() + 1).padStart(2, '0')
-                let ano = data.getFullYear()
-                let hora = data.getHours()
-                let minutos = data.getMinutes()
-                let segundos = data.getSeconds()
+                let dataAtual = new Date();
+                
+                const cancelado = await client.query("SELECT cancelado from leilao where leilaoid = $1", [leilaoid])
+                if(cancelado.rows[0].cancelado) {
+                    return res.status(400).json({ err: "Este leilão foi cancelado. Não pode licitar."});
+                }
 
-                let dataAtual = ano + "-" + mes + "-" + dia + " " + hora + ":" + minutos + ":" + segundos
-                
                 const criador = await client.query("SELECT utilizador_userid from leilao where leilaoid = $1", [leilaoid])
                 if(parseInt(criador.rows[0].utilizador_userid) === userid) {
                     return res.status(400).json({ err: "Você criou este leilão. Não pode licitar."});
@@ -326,16 +313,26 @@ exports.post_licitacao = async (req, res) => {
                     return res.status(400).json({ err: "A licitação introduzida não supera a atual licitacao mais elevada"});
                 }
 
-            
-                if(!res.headersSent) {             
-                    await client.query('BEGIN')
-    
-                    await client.query("INSERT INTO licitacao (preco, valida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4)", [preco, true, leilaoid, userid])
-                    
-                    await client.query("UPDATE leilao SET maxlicitacao = $1 WHERE leilaoid = $2", [preco, leilaoid])
-                    
-                    await client.query('COMMIT')
+            try {
+                await client.query('BEGIN')
+                
+                await client.query("INSERT INTO licitacao (preco, valida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4)", [preco, true, leilaoid, userid])
+                
+                let licitadores = await client.query("select distinct utilizador_userid from licitacao where leilao_leilaoid = $1", [leilaoid])
+                
+                await client.query("UPDATE leilao SET maxlicitacao = $1 WHERE leilaoid = $2", [preco, leilaoid])
+                
+                let mensagem = "A sua licitação no leilão " + results.rows[0].titulo + " foi ultrapassada. A nova licitação máxima é de " + preco
+                // vai buscar todos os escritores do mural do leilão
+                for(let i = 0; i < licitadores.rows.length; i++) {
+                    // Se nao for uma licitacao do user a licitar neste momento
+                    if(licitadores.rows[i].utilizador_userid != userid) {
+                        await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagem, dataAtual, false, leilaoid, licitadores.rows[i].utilizador_userid])
+                    }
                 }
+
+                await client.query('COMMIT')
+
             } catch (error) {
                 await client.query('ROLLBACK')
                 if(!res.headersSent) {   
@@ -363,7 +360,7 @@ exports.post_licitacao = async (req, res) => {
           };
 
           if(!res.headersSent) {   
-            console.table(results.rows)
+            //console.table(results.rows)
             return res.status(200).json(response)
           }
     } catch (error) {
@@ -417,7 +414,7 @@ exports.get_leiloes_user = async (req, res) => {
               };
         }
 
-        console.table(results.rows)
+        //console.table(results.rows)
         res.status(200).json(response)
 
     } catch (error) {
@@ -462,25 +459,16 @@ exports.post_mural = async (req, res) => {
         } else {
             try {
                 
-                let data = new Date();
-                let dia = String(data.getDate()).padStart(2, '0');
-                let mes = String(data.getMonth() + 1).padStart(2, '0')
-                let ano = data.getFullYear()
-                let hora = data.getHours()
-                let minutos = data.getMinutes()
-                let segundos = data.getSeconds()
-
-                let dataAtual = ano + "-" + mes + "-" + dia + " " + hora + ":" + minutos + ":" + segundos
-
-                
+                let dataAtual = new Date();
+        
                 await client.query('BEGIN')
 
                 await client.query("INSERT INTO muralmensagem (texto, data, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4)", [mensagem, dataAtual, leilaoid, userid])
   
-                let escritores = await client.query("select distinct utilizador_userid from muralmensagem")
+                let escritores = await client.query("select distinct utilizador_userid from muralmensagem where leilao_leilaoid = $1", [leilaoid])
 
                 // escrever a mensagem na caixa de mensagens do user criador do leilão (mas apenas se nao for o proprio criador a escrever)
-                console.log(userid + " " + criador.rows[0].utilizador_userid)
+                //console.log(userid + " " + criador.rows[0].utilizador_userid)
                 if(userid != criador.rows[0].utilizador_userid){
                     await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagem, dataAtual, false, leilaoid, criador.rows[0].utilizador_userid])
                 }
@@ -488,7 +476,7 @@ exports.post_mural = async (req, res) => {
                 // vai buscar todos os escritores do mural do leilão
                 for(let i = 0; i < escritores.rows.length; i++) {
                     // Se nao for uma mensagem do criador nem do user que escreveu a mensagem
-                    console.log(escritores.rows[i].utilizador_userid + " " + criador.rows[0].utilizador_userid + " " + escritores.rows[i].utilizador_userid + " " + userid)
+                    //console.log(escritores.rows[i].utilizador_userid + " " + criador.rows[0].utilizador_userid + " " + escritores.rows[i].utilizador_userid + " " + userid)
                     if(escritores.rows[i].utilizador_userid != criador.rows[0].utilizador_userid && escritores.rows[i].utilizador_userid != userid) {
                         await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagem, dataAtual, false, leilaoid, escritores.rows[i].utilizador_userid])
                     }
@@ -517,7 +505,7 @@ exports.post_mural = async (req, res) => {
           };
 
           if(!res.headersSent) {   
-            console.table(results.rows)
+            //console.table(results.rows)
             return res.status(200).json(response)
           }
 
@@ -527,6 +515,177 @@ exports.post_mural = async (req, res) => {
             res.status(500).json({ err: "Erro a escrever mensagem no mural" });
         }
         
+    } finally {
+        if(typeof client !== "undefined") {
+            client.end()
+        }
+    }
+}
+
+exports.terminar_leiloes = async (req, res) => {
+    try {
+        const tokenheader = req.headers.authorization;
+        const token = tokenheader.split(" ")[1];
+        const decoded = jwt.verify(token, process.env.TOKEN_PASSWORD);
+        const userid = decoded.userId;
+        
+        let client = await pool.connect()
+
+        const adm = await client.query("select admin from utilizador where userid = $1", [userid])
+        if(!adm.rows[0].admin) {
+            return res.status(500).json({ err: "Precisa de ser admin para realizar esta operação"})
+        } 
+
+        // Vai buscar todos os leiloes
+        let leiloes = await client.query("select * from leilao")
+
+        let response;
+        if(leiloes.rows.length === 0) {
+            response = {
+                message: "Não existe nenhum leilão criado"
+            }
+
+            return res.status(200).json(response)
+        } else {
+            let entrou = 0
+            let dataAtual = new Date();
+            
+            try {
+                await client.query('BEGIN')
+
+                for(let i = 0; i < leiloes.rows.length; i++){
+                    
+                    if(dataAtual > leiloes.rows[i].fim) {
+                        console.log("1")
+                        entrou = 1
+                            console.log("2")
+                            
+                            // Se houve uma licitação
+                            if(leiloes.rows[i].maxlicitacao != null && leiloes.rows[i].vencedor == null) {
+                                // Vai buscar a licitação vencedora
+                                let vencedor = await client.query("select * from licitacao WHERE leilao_leilaoid = $1 AND preco = $2", [leiloes.rows[i].leilaoid, leiloes.rows[i].maxlicitacao])
+                                // Vai buscar o nome do licitador vencedor
+                                let vencedorNome = await client.query("select username from utilizador where userid = $1", [vencedor.rows[0].utilizador_userid])
+
+                                await client.query("UPDATE leilao SET vencedor = $1 WHERE leilaoid = $2", [vencedor.rows[0].utilizador_userid, leiloes.rows[i].leilaoid])
+                                
+                                let mensagemVencedor = "Venceu o leilão " + leiloes.rows[i].titulo
+
+                                let mensagemVendedor = "O utilizador " + vencedorNome.rows[0].username + " venceu o seu leilão " + leiloes.rows[i].titulo
+
+                                // Envia mensagem ao vencedor
+                                await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagemVencedor, dataAtual, false, leiloes.rows[i].leilaoid, vencedor.rows[0].utilizador_userid])
+
+                                // Envia mensagem ao vendedor
+                                await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagemVendedor, dataAtual, false, leiloes.rows[i].leilaoid, leiloes.rows[i].utilizador_userid])
+                            
+                            } 
+                            else if(leiloes.rows[i].vencedor != 0) {
+
+                                await client.query("UPDATE leilao SET vencedor = $1 WHERE leilaoid = $2", [0, leiloes.rows[i].leilaoid])
+
+                                let mensagemVendedor = "Ninguém licitou no seu leilão " + leiloes.rows[i].titulo + ". O leilão terminou."
+
+                                // Envia mensagem ao vendedor
+                                await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagemVendedor, dataAtual, false, leiloes.rows[i].leilaoid, leiloes.rows[i].utilizador_userid])
+                            }
+
+                            
+                        }
+                }
+                    
+                await client.query('COMMIT')
+                } catch (error) {
+                    await client.query('ROLLBACK')
+                    return res.status(500).json({ err: "Erro a terminar leilao" });
+                }
+            if(entrou == 1) {
+                response = {
+                    mensagem: "Leilões terminados com sucesso"
+                  };
+            } else {
+                response = {
+                    mensagem: "Não havia leilões com necessidade de terminar"
+                  };
+            }
+
+            //console.table(results.rows)
+            return res.status(200).json(response)
+            
+        }
+
+
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ err: "Erro a terminar leilao" });
+
+    } finally {
+        if(typeof client !== "undefined") {
+            client.end()
+        }
+    }
+}
+
+exports.cancelar_leilao = async (req, res) => {
+    try {
+        const leilaoid = req.params.leilaoid;
+
+        const tokenheader = req.headers.authorization;
+        const token = tokenheader.split(" ")[1];
+        const decoded = jwt.verify(token, process.env.TOKEN_PASSWORD);
+        const userid = decoded.userId;
+        
+        let client = await pool.connect()
+
+        const adm = await client.query("select admin from utilizador where userid = $1", [userid])
+        if(!adm.rows[0].admin) {
+            return res.status(500).json({ err: "Precisa de ser admin para realizar esta operação"})
+        } 
+
+        let results = await client.query("select * from leilao where leilaoid = $1", [leilaoid])
+        let response;
+        if(results.rows.length === 0) {
+            response = {
+                message: "Não existe nenhum leilão com esse id"
+            }
+
+            return res.status(200).json(response)
+        } else {
+            try {
+                let dataAtual = new Date();
+
+                await client.query('BEGIN')
+
+                await client.query("UPDATE leilao SET cancelado = $1 WHERE leilaoid = $2", [true, leilaoid])
+                // Vai informar todos os licitadores e utilizadores que escreveram no mural que o leilão foi cancelado
+                let interessados = await client.query("select distinct utilizador_userid from licitacao where leilao_leilaoid = $1 UNION select distinct utilizador_userid from muralmensagem where leilao_leilaoid = $1", [leilaoid])
+                
+                let mensagem = "O leilão " + results.rows[0].titulo + " foi cancelado"
+                // vai buscar todos os escritores do mural do leilão
+                for(let i = 0; i < interessados.rows.length; i++) {
+                    await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagem, dataAtual, false, leilaoid, interessados.rows[i].utilizador_userid])
+                }
+                await client.query('COMMIT')
+            } catch (error) {
+                await client.query('ROLLBACK')
+                return res.status(500).json({ err: "Erro a cancelar leilao" });
+            }
+
+            response = {
+                mensagem: "Leilão cancelado com sucesso"
+              };
+
+            //console.table(results.rows)
+            return res.status(200).json(response)
+        }
+
+
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ err: "Erro a cancelar leilao" });
+
     } finally {
         if(typeof client !== "undefined") {
             client.end()

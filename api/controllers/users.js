@@ -31,7 +31,7 @@ exports.get_users = async (req, res) => {
             };
         }
         
-        console.table(results.rows)
+        //console.table(results.rows)
         res.status(200).json(response)
     } catch (error) {
         res.status(500).json({ err: "Erro a ler users" });
@@ -71,12 +71,6 @@ exports.registar_user = async (req, res) => {
         if(!req.body.username || !req.body.email || !req.body.password) {
             res.status(500).json({ err: "Preencha os campos todos"})
         } 
-       /* else if (error.detail.includes("Key (username)") && error.detail.includes("already exists.")){
-            res.status(500).json({ err: "Já existe um user com esse username"})  
-        } 
-        else if (error.detail.includes("Key (email)") && error.detail.includes("already exists.")){
-            res.status(500).json({ err: "Já existe um user com esse email"})  
-        }*/ 
         else {
             console.log(error)
             res.status(500).json({ err: "Erro a registar user" });
@@ -180,7 +174,7 @@ exports.get_mensagens = async (req, res) => {
               };
         }
 
-        console.table(results.rows)
+        //console.table(results.rows)
         res.status(200).json(response)
 
     } catch (error) {
@@ -234,12 +228,117 @@ exports.get_notificacoes = async (req, res) => {
               };
         }
 
-        console.table(results.rows)
+        //console.table(results.rows)
         res.status(200).json(response)
 
     } catch (error) {
         console.log(error)
         res.status(500).json({ err: "Erro a ler notificações" });
+    } finally {
+        if(typeof client !== "undefined") {
+            client.end()
+        }
+    }
+}
+
+exports.banir = async (req, res) => {
+    try {
+        let userBanidoId = req.params.userid
+
+        const tokenheader = req.headers.authorization;
+        const token = tokenheader.split(" ")[1];
+        const decoded = jwt.verify(token, process.env.TOKEN_PASSWORD);
+        const userid = decoded.userId;
+
+        let client = await pool.connect()
+
+        const adm = await client.query("select admin from utilizador where userid = $1", [userid])
+        if(!adm.rows[0].admin) {
+            return res.status(500).json({ err: "Precisa de ser admin para realizar esta operação"})
+        } 
+
+        // vai buscar todas as mensagens
+        let results = await client.query("select * from mensagemprivada where utilizador_userid = $1", [userid])
+
+        let response;
+        if(results.rows.length === 0) {
+            response = {
+                message: "Não existe nenhuma mensagem para este user"
+            }
+        } else {
+            response = {
+                // o que vai ser printado no ecrã
+                count: results.rows.length,
+                list: results.rows.map((mensagem) => {
+                  return {
+                    id: mensagem.mensagemid,
+                    texto: mensagem.texto,
+                    data: mensagem.data,
+                    leilaoid: mensagem.leilao_leilaoid,
+                    userid: mensagem.utilizador_id
+                  };
+                }),
+              };
+        }
+
+        //console.table(results.rows)
+        res.status(200).json(response)
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ err: "Erro a ler mensagens" });
+    } finally {
+        if(typeof client !== "undefined") {
+            client.end()
+        }
+    }
+}
+
+exports.stats = async (req, res) => {
+    try {
+
+        const tokenheader = req.headers.authorization;
+        const token = tokenheader.split(" ")[1];
+        const decoded = jwt.verify(token, process.env.TOKEN_PASSWORD);
+        const userid = decoded.userId;
+
+        let client = await pool.connect()
+
+        const adm = await client.query("select admin from utilizador where userid = $1", [userid])
+        if(!adm.rows[0].admin) {
+            return res.status(500).json({ err: "Precisa de ser admin para realizar esta operação"})
+        } 
+
+        // vai buscar todas as mensagens
+        let results = await client.query("select * from mensagemprivada where utilizador_userid = $1", [userid])
+
+        let response;
+        if(results.rows.length === 0) {
+            response = {
+                message: "Não existe nenhuma mensagem para este user"
+            }
+        } else {
+            response = {
+                // o que vai ser printado no ecrã
+                count: results.rows.length,
+                list: results.rows.map((mensagem) => {
+                  return {
+                    id: mensagem.mensagemid,
+                    texto: mensagem.texto,
+                    data: mensagem.data,
+                    leilaoid: mensagem.leilao_leilaoid,
+                    userid: mensagem.utilizador_id
+                  };
+                }),
+              };
+        }
+
+        //console.table(results.rows)
+        res.status(200).json(response)
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ err: "Erro a ler mensagens" });
     } finally {
         if(typeof client !== "undefined") {
             client.end()
