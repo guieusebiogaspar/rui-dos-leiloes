@@ -1,5 +1,4 @@
 const pool = require("../../db")
-const Cursor = require('pg-cursor')
 const bcrypt = require("bcrypt")
 const jwt = require("jsonwebtoken")
 require("dotenv").config();
@@ -137,10 +136,110 @@ exports.login_user = async (req, res) => {
         }
         else {
             // No user
-            res.status(500).json({ message: "Não há nenhum user com esse email"})
+            res.status(500).json({ message: "Não há nenhum user com esse username"})
         }
     } catch (error) {
         res.status(500).json({ err: "Erro a registar user" });
+    } finally {
+        if(typeof client !== "undefined") {
+            client.end()
+        }
+    }
+}
+
+exports.get_mensagens = async (req, res) => {
+    try {
+        const tokenheader = req.headers.authorization;
+        const token = tokenheader.split(" ")[1];
+        const decoded = jwt.verify(token, process.env.TOKEN_PASSWORD);
+        const userid = decoded.userId;
+
+        let client = await pool.connect()
+
+        // vai buscar todas as mensagens
+        let results = await client.query("select * from mensagemprivada where utilizador_userid = $1", [userid])
+
+        let response;
+        if(results.rows.length === 0) {
+            response = {
+                message: "Não existe nenhuma mensagem para este user"
+            }
+        } else {
+            response = {
+                // o que vai ser printado no ecrã
+                count: results.rows.length,
+                list: results.rows.map((mensagem) => {
+                  return {
+                    id: mensagem.mensagemid,
+                    texto: mensagem.texto,
+                    data: mensagem.data,
+                    leilaoid: mensagem.leilao_leilaoid,
+                    userid: mensagem.utilizador_id
+                  };
+                }),
+              };
+        }
+
+        console.table(results.rows)
+        res.status(200).json(response)
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ err: "Erro a ler mensagens" });
+    } finally {
+        if(typeof client !== "undefined") {
+            client.end()
+        }
+    }
+}
+
+exports.get_notificacoes = async (req, res) => {
+    try {
+        const tokenheader = req.headers.authorization;
+        const token = tokenheader.split(" ")[1];
+        const decoded = jwt.verify(token, process.env.TOKEN_PASSWORD);
+        const userid = decoded.userId;
+
+        let client = await pool.connect()
+
+        // vai buscar as mensagens por ler
+        let results = await client.query("select * from mensagemprivada where utilizador_userid = $1 and lida = false", [userid])
+
+        await client.query('BEGIN')
+
+        for(let i = 0; i < results.rows.length; i++){
+            await client.query("UPDATE mensagemprivada SET lida = true WHERE mensagemid = $1", [results.rows[i].mensagemid])
+        }
+
+        await client.query('COMMIT')
+
+        let response;
+        if(results.rows.length === 0) {
+            response = {
+                message: "Não existe nenhuma notificação para este user"
+            }
+        } else {
+            response = {
+                // o que vai ser printado no ecrã
+                count: results.rows.length,
+                list: results.rows.map((mensagem) => {
+                  return {
+                    id: mensagem.mensagemid,
+                    texto: mensagem.texto,
+                    data: mensagem.data,
+                    leilaoid: mensagem.leilao_leilaoid,
+                    userid: mensagem.utilizador_id
+                  };
+                }),
+              };
+        }
+
+        console.table(results.rows)
+        res.status(200).json(response)
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ err: "Erro a ler notificações" });
     } finally {
         if(typeof client !== "undefined") {
             client.end()
