@@ -124,7 +124,7 @@ exports.get_leilao = async (req, res) => {
 
         let mensagens = await client.query("select * from muralmensagem where leilao_leilaoid = $1", [leilaoid])
 
-        let licitacoes = await client.query("select * from licitacao where leilao_leilaoid = $1", [leilaoid])
+        let licitacoes = await client.query("select * from licitacao where leilao_leilaoid = $1 AND valida = $2", [leilaoid, true])
 
         let response;
         if(results.rows.length === 0) {
@@ -180,6 +180,13 @@ exports.get_leilao = async (req, res) => {
 exports.put_editar_leilao = async (req, res) => {
     try {
         const leilaoid = req.params.leilaoid;
+        
+        let client = await pool.connect()
+
+        const tokenheader = req.headers.authorization;
+        const token = tokenheader.split(" ")[1];
+        const decoded = jwt.verify(token, process.env.TOKEN_PASSWORD);
+        const userid = decoded.userId;
 
         if(!req.body.titulo && !req.body.descricao) {
             return res.status(500).json({ err: "Não introduziu nem titulo nem descrição para editar"})
@@ -188,8 +195,6 @@ exports.put_editar_leilao = async (req, res) => {
         let titulo = req.body.titulo;
         let descricao = req.body.descricao;
         let dataEdicao = new Date();
-
-        let client = await pool.connect()
 
         
         let results = await client.query("select * from leilao where leilaoid = $1", [leilaoid])
@@ -202,6 +207,12 @@ exports.put_editar_leilao = async (req, res) => {
             return res.status(200).json(response)
         } else {
             try {
+
+                const criador = await client.query("SELECT utilizador_userid from leilao where leilaoid = $1", [leilaoid])
+
+                if(criador.rows[0].utilizador_userid != userid){
+                    return res.status(500).json({ err: "Não é o user criador deste leilão, logo não pode editar"})
+                }
                 await client.query('BEGIN')
                 
             
@@ -378,7 +389,10 @@ exports.post_licitacao = async (req, res) => {
 
 exports.get_leiloes_user = async (req, res) => {
     try {
-        const userid = req.params.userid;
+        const tokenheader = req.headers.authorization;
+        const token = tokenheader.split(" ")[1];
+        const decoded = jwt.verify(token, process.env.TOKEN_PASSWORD);
+        const userid = decoded.userId;
 
         let client = await pool.connect()
 
@@ -555,43 +569,40 @@ exports.terminar_leiloes = async (req, res) => {
 
                 for(let i = 0; i < leiloes.rows.length; i++){
                     
-                    if(dataAtual > leiloes.rows[i].fim) {
-                        console.log("1")
+                    if(dataAtual > leiloes.rows[i].fim && !leiloes.rows[i].cancelado) {
                         entrou = 1
-                            console.log("2")
                             
-                            // Se houve uma licitação
-                            if(leiloes.rows[i].maxlicitacao != null && leiloes.rows[i].vencedor == null) {
-                                // Vai buscar a licitação vencedora
-                                let vencedor = await client.query("select * from licitacao WHERE leilao_leilaoid = $1 AND preco = $2", [leiloes.rows[i].leilaoid, leiloes.rows[i].maxlicitacao])
-                                // Vai buscar o nome do licitador vencedor
-                                let vencedorNome = await client.query("select username from utilizador where userid = $1", [vencedor.rows[0].utilizador_userid])
+                        // Se houve uma licitação
+                        if(leiloes.rows[i].maxlicitacao != null && leiloes.rows[i].vencedor == null) {
+                            // Vai buscar a licitação vencedora
+                            let vencedor = await client.query("select * from licitacao WHERE leilao_leilaoid = $1 AND preco = $2", [leiloes.rows[i].leilaoid, leiloes.rows[i].maxlicitacao])
+                            // Vai buscar o nome do licitador vencedor
+                            let vencedorNome = await client.query("select username from utilizador where userid = $1", [vencedor.rows[0].utilizador_userid])
 
-                                await client.query("UPDATE leilao SET vencedor = $1 WHERE leilaoid = $2", [vencedor.rows[0].utilizador_userid, leiloes.rows[i].leilaoid])
-                                
-                                let mensagemVencedor = "Venceu o leilão " + leiloes.rows[i].titulo
-
-                                let mensagemVendedor = "O utilizador " + vencedorNome.rows[0].username + " venceu o seu leilão " + leiloes.rows[i].titulo
-
-                                // Envia mensagem ao vencedor
-                                await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagemVencedor, dataAtual, false, leiloes.rows[i].leilaoid, vencedor.rows[0].utilizador_userid])
-
-                                // Envia mensagem ao vendedor
-                                await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagemVendedor, dataAtual, false, leiloes.rows[i].leilaoid, leiloes.rows[i].utilizador_userid])
+                            await client.query("UPDATE leilao SET vencedor = $1 WHERE leilaoid = $2", [vencedor.rows[0].utilizador_userid, leiloes.rows[i].leilaoid])
                             
-                            } 
-                            else if(leiloes.rows[i].vencedor != 0) {
+                            let mensagemVencedor = "Venceu o leilão " + leiloes.rows[i].titulo
 
-                                await client.query("UPDATE leilao SET vencedor = $1 WHERE leilaoid = $2", [0, leiloes.rows[i].leilaoid])
+                            let mensagemVendedor = "O utilizador " + vencedorNome.rows[0].username + " venceu o seu leilão " + leiloes.rows[i].titulo
 
-                                let mensagemVendedor = "Ninguém licitou no seu leilão " + leiloes.rows[i].titulo + ". O leilão terminou."
+                            // Envia mensagem ao vencedor
+                            await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagemVencedor, dataAtual, false, leiloes.rows[i].leilaoid, vencedor.rows[0].utilizador_userid])
 
-                                // Envia mensagem ao vendedor
-                                await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagemVendedor, dataAtual, false, leiloes.rows[i].leilaoid, leiloes.rows[i].utilizador_userid])
-                            }
+                            // Envia mensagem ao vendedor
+                            await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagemVendedor, dataAtual, false, leiloes.rows[i].leilaoid, leiloes.rows[i].utilizador_userid])
+                        } 
+                        else if(leiloes.rows[i].vencedor != 0 && !leiloes.rows[i].cancelado) {
 
-                            
+                            await client.query("UPDATE leilao SET vencedor = $1 WHERE leilaoid = $2", [0, leiloes.rows[i].leilaoid])
+
+                            let mensagemVendedor = "Ninguém licitou no seu leilão " + leiloes.rows[i].titulo + ". O leilão terminou."
+
+                            // Envia mensagem ao vendedor
+                            await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagemVendedor, dataAtual, false, leiloes.rows[i].leilaoid, leiloes.rows[i].utilizador_userid])
                         }
+
+                        
+                    }
                 }
                     
                 await client.query('COMMIT')

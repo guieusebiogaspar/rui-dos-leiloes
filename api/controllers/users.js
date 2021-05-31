@@ -91,6 +91,9 @@ exports.login_user = async (req, res) => {
         let client = await pool.connect()
         let results = await client.query("SELECT * FROM utilizador WHERE username = $1", [username])
 
+        if(results.rows[0].banido) {
+            return res.status(500).json({ message: "Foi banido do sistema" });
+        }
         if(results.rows.length > 0) {
             let user = results.rows[0];
             
@@ -257,36 +260,100 @@ exports.banir = async (req, res) => {
             return res.status(500).json({ err: "Precisa de ser admin para realizar esta operação"})
         } 
 
-        // vai buscar todas as mensagens
-        let results = await client.query("select * from mensagemprivada where utilizador_userid = $1", [userid])
+        let results = await client.query("select * from utilizador where userid = $1", [userBanidoId])
 
         let response;
         if(results.rows.length === 0) {
             response = {
-                message: "Não existe nenhuma mensagem para este user"
+                message: "Não existe nenhum user com esse id"
             }
-        } else {
-            response = {
-                // o que vai ser printado no ecrã
-                count: results.rows.length,
-                list: results.rows.map((mensagem) => {
-                  return {
-                    id: mensagem.mensagemid,
-                    texto: mensagem.texto,
-                    data: mensagem.data,
-                    leilaoid: mensagem.leilao_leilaoid,
-                    userid: mensagem.utilizador_id
-                  };
-                }),
-              };
-        }
 
-        //console.table(results.rows)
-        res.status(200).json(response)
+            return res.status(200).json(response)
+        } else {
+            let dataAtual = new Date();
+
+            try {
+                await client.query('BEGIN')
+
+                await client.query("UPDATE utilizador SET banido = $1 where userid = $2", [true, userBanidoId])
+
+                // Cancelar os leilões criados pelo user
+                let leiloes = await client.query("select * from leilao where utilizador_userid = $1", [userBanidoId])
+
+                if(leiloes.rows.length > 0) {
+                    for(let i = 0; i < leiloes.rows.length; i++) {
+                        await client.query("UPDATE leilao SET cancelado = $1 WHERE leilaoid = $2", [true, leiloes.rows[i].leilaoid])
+
+                        let mensagem = "O leilão " + leiloes.rows[0].titulo + " foi cancelado porque o seu criador foi banido. Pedimos desculpa pelo incómodo"
+                        
+                        // Escreve no mural do leilao
+                        await client.query("INSERT INTO muralmensagem (texto, data, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4)", [mensagem, dataAtual, leiloes.rows[i].leilaoid, userid])
+                        
+                        // Vai informar todos os licitadores e utilizadores que escreveram no mural que o leilão foi cancelado
+                        let interessados = await client.query("select distinct utilizador_userid from licitacao where leilao_leilaoid = $1 UNION select distinct utilizador_userid from muralmensagem where leilao_leilaoid = $1", [leiloes.rows[i].leilaoid])
+
+                        for(let j = 0; j < interessados.rows.length; j++) {
+                            await client.query("INSERT INTO mensagemprivada (texto, data, lida, leilao_leilaoid, utilizador_userid) VALUES ($1, $2, $3, $4, $5)", [mensagem, dataAtual, false, leiloes.rows[i].leilaoid, interessados.rows[j].utilizador_userid])
+                        }
+                    }
+                }
+
+                // Invalidar licitações
+                await client.query("UPDATE licitacao SET valida = $1 WHERE utilizador_userid = $2", [false, userBanidoId])
+
+                leiloes = await client.query("select * from leilao")
+
+                // invalidar as licitações superior a esta menos a maior
+                for(let i = 0; i < leiloes.rows.length; i++) {
+                    let leilaoAfetado = await client.query("select MAX(preco) AS preco from licitacao where utilizador_userid = $1 AND leilao_leilaoid = $2", [userBanidoId, leiloes.rows[i].leilaoid])
+                    
+                    // Se existir alguma licitacao do user banido
+                    if(leilaoAfetado.rows[0].preco != null) {
+                        // licitacoes do leilao em questao menos as licitacoes do user banido
+                        let licitacoes = await client.query("select * from licitacao where leilao_leilaoid = $1 AND utilizador_userid != $2 ORDER BY preco", [leiloes.rows[i].leilaoid, userBanidoId])
+
+                        let entrou = 0
+                        for(let j = 0; j < licitacoes.rows.length; j++) {
+                            if(j != (licitacoes.rows.length - 1)) {
+                                // meter as licitacoes superiores invalidas
+                                if(licitacoes.rows[j].preco > leilaoAfetado.rows[0].preco) {
+                                    await client.query("UPDATE licitacao SET valida = $1 where licitacaoid = $2", [false, licitacoes.rows[j].licitacaoid])
+                                }
+                            } else {
+                                // Meter a maior licitacao como a maxlicitacao e com o valor da que foi invalidada
+        
+                                if(licitacoes.rows[j].preco > leilaoAfetado.rows[0].preco) {
+                                    entrou = 1
+                                    await client.query("UPDATE licitacao SET preco = $1 where licitacaoid = $2", [leilaoAfetado.rows[0].preco, licitacoes.rows[j].licitacaoid])
+                                    await client.query("UPDATE leilao SET maxlicitacao = $1 where leilaoid = $2", [licitacoes.rows[j].preco, leiloes.rows[i].leilaoid])
+                                }
+
+                                // Caso não tenha existido nenhuma licitação superior à invalidada, a max licitação fica a que vinha atrás
+                                if(entrou == 0) {
+                                    await client.query("UPDATE leilao SET maxlicitacao = $1 where leilaoid = $2", [licitacoes.rows[j].preco, leiloes.rows[i].leilaoid])
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                await client.query('COMMIT')
+            } catch (error) {
+                await client.query('ROLLBACK')
+                return res.status(500).json({ err: "Erro a banir utilizador" });
+            }
+
+            response = {
+                mensagem: "Utilizador banido com sucesso"
+              };
+
+            //console.table(results.rows)
+            return res.status(200).json(response)
+        }
 
     } catch (error) {
         console.log(error)
-        res.status(500).json({ err: "Erro a ler mensagens" });
+        res.status(500).json({ err: "Erro a banir utilizador" });
     } finally {
         if(typeof client !== "undefined") {
             client.end()

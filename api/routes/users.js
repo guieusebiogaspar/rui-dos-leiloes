@@ -26,4 +26,7 @@ router.get("/notificacoes", verifyToken, UsersController.get_notificacoes);
 // admin bane user
 router.put("/banir/:userid", verifyToken, UsersController.banir)
 
+// estatisticas
+//router.get("/stats", verifyToken, UsersController.get_stats);
+
 module.exports = router;
